@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Fragrance Recommendation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #333;
+        }
+        #video-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        img {
+            width: 60%;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        }
+        #getFragranceBtn {
+            margin-top: 20px;
+            padding: 12px 20px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        #getFragranceBtn:hover {
+            background-color: #0056b3;
+        }
+        #retryBtn {
+            margin-top: 20px;
+            padding: 12px 20px;
+            font-size: 16px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s;
+            display: none; /* Initially hidden */
+        }
+        #retryBtn:hover {
+            background-color: #218838;
+        }
+        #fragrance-result {
+            margin-top: 20px;
+            font-size: 18px;
+            color: #333;
+            min-height: 40px;
+            text-align: left;
+        }
+        .loading {
+            color: #ff6600;
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .fragrance-card {
+            background-color: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: left;
+        }
+        .fragrance-card h3 {
+            color: #007bff;
+            font-size: 22px;
+        }
+        .fragrance-card p {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #555;
+        }
+        .fragrance-card ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .fragrance-card ul li {
+            font-size: 16px;
+            color: #444;
+            margin-bottom: 10px;
+        }
+        /* Modal styles */
+        #loadingModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+        }
+        #loadingMessage {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 20px;
+            font-weight: bold;
+            color: #ff6600;
+        }
+
+        .fragrance-image {
+            width: 20vw;
+            height: auto;
+            border-radius: 10px;
+            margin-top: 10px;
+            display: block;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>향수를 추천받아보세요</h1>
+
+    <!-- 향수 이미지가 여기에 표시됩니다. -->
+    <img id="fragranceImage" src="" alt="Fragrance Image" class="fragrance-image" style="display: none;">
+
+    <div id="video-container">
+        <img src="{{ url_for('video') }}" alt="Video Stream">
+    </div>
+
+    <button id="getFragranceBtn">향수 추천받기</button>
+
+    <button id="retryBtn" onclick="restartCamera()">다시하기</button>
+
+    <div id="fragrance-result">
+        <!-- 향수 추천 결과가 여기에 표시됩니다 -->
+    </div>
+
+    <!-- Loading Modal -->
+    <div id="loadingModal">
+        <div id="loadingMessage">잠시만 기다려주세요...</div>
+    </div>
+
+    <script>
+        document.getElementById('getFragranceBtn').addEventListener('click', function() {
+            // 카메라 숨기기
+            document.getElementById('video-container').style.display = 'none';
+            // 다시 시도 버튼 보이기
+            document.getElementById('retryBtn').style.display = 'inline-block';
+
+            // 로딩 메시지 표시
+            document.getElementById('loadingModal').style.display = 'flex';
+
+            // 향수 추천 결과만 보여줄 준비
+            const resultDiv = document.getElementById('fragrance-result');
+            resultDiv.innerHTML = '';  // 처음에는 아무 것도 표시되지 않음
+
+            // 향수 추천 요청
+            fetch('/get_fragrance', {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                // 로딩 메시지 숨기기
+                document.getElementById('loadingModal').style.display = 'none';
+
+                if (data.fragrance) {
+                    // 첫 두 문장을 제외하고 출력하기
+                    let fragranceText = data.fragrance;
+
+                    // `*`를 기준으로 각 항목을 나누고 `<br>` 추가하여 줄 바꿈
+                    const fragranceItems = fragranceText.split('**').filter(item => item.trim() !== "");
+                    const formattedResult = fragranceItems.map(item => `<p>${item.trim()}</p>`).join(' ');
+
+                    // 계열을 추출하여 이미지 선택
+                    const fragranceFamily = getFragranceFamily(fragranceText);
+                    const fragranceImage = getFragranceImage(fragranceFamily);
+
+                    // 추천 결과만 표시
+                    resultDiv.innerHTML = `
+                        <div class="fragrance-card">
+                            <h3>🌿 Recommended Fragrance:</h3>
+                            ${formattedResult}
+                        </div>
+                    `;
+                    // 향수 이미지 표시
+                    const fragranceImgElement = document.getElementById('fragranceImage');
+                    fragranceImgElement.src = fragranceImage;
+                    fragranceImgElement.style.display = 'block';  // 이미지 표시
+                } else {
+                    resultDiv.innerHTML = `<span style='color: red;'>❌ Error: ${data.error}</span>`;
+                }
+            })
+            .catch(error => {
+                // 로딩 메시지 숨기기
+                document.getElementById('loadingModal').style.display = 'none';
+                resultDiv.innerHTML = `<span style='color: red;'>❌ Request Failed: ${error}</span>`;
+            });
+        });
+
+        // 향수 계열을 추출하는 함수
+        function getFragranceFamily(fragranceText) {
+            // 계열을 찾는 로직 (예: '플로럴', '우디', '시트러스' 등)
+            if (fragranceText.includes('플로럴')) return 'floral';
+            if (fragranceText.includes('우디')) return 'woody';
+            if (fragranceText.includes('시트러스')) return 'citrus';
+            return 'default'; // 기본 계열
+        }
+
+        // 향수 계열에 맞는 이미지를 반환하는 함수
+        function getFragranceImage(family) {
+            const images = {
+                floral: 'https://www.valarflowers.com/cdn/shop/files/B28A0079.jpg?v=1696214606&width=1500',  // 실제 플로럴 이미지 URL로 변경
+                woody: 'https://lh3.googleusercontent.com/proxy/UgIIZ6c-StHn34Qk3B6OyoQq2X9JxCBS4oXx6uOtl8iplMQBW04clv2cec0wjGhWUA',    // 실제 우디 이미지 URL로 변경
+                citrus: 'https://m.candlemano.com/web/product/big/201909/f9c45f4d420c8c4500ae264907148aec.jpg',  // 실제 시트러스 이미지 URL로 변경
+                default: 'https://img1.daumcdn.net/thumb/C500x500/?fname=http://t1.daumcdn.net/brunch/service/user/2lJm/image/KH34NHq6WDyKm6_5TUB8SwdgnDI.png' // 기본 이미지 URL로 변경
+            };
+            return images[family] || images.default;
+        }
+
+        // 다시 시도 버튼 클릭 시 카메라 다시 활성화
+        function restartCamera() {
+            location.reload();
+        }
+    </script>
+</body>
+</html>
