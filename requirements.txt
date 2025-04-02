@@ -5,3 +5,4 @@ google-generativeai
 numpy
 pillow
 tf-keras
+opencv-python-headless
