@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Face Fragrance Recommendation</title>
     <style>
+        /* 기존 스타일 유지 */
         body {
             font-family: Arial, sans-serif;
             text-align: center;
@@ -130,11 +131,11 @@
     <!-- 향수 이미지가 여기에 표시됩니다. -->
     <img id="fragranceImage" src="" alt="Fragrance Image" class="fragrance-image" style="display: none;">
 
+
     <div id="video-container">
         <video id="video" autoplay></video>
         <canvas id="canvas" width="640" height="480" style="display: none;"></canvas>
     </div>
-
 
     <button id="getFragranceBtn">향수 추천받기</button>
 
@@ -144,23 +145,49 @@
         <!-- 향수 추천 결과가 여기에 표시됩니다 -->
     </div>
 
+    <div id="cameraPermissionMessage" style="display: none; color: red;">
+        <p>카메라 권한이 필요합니다. 브라우저 설정에서 카메라 권한을 허용해주세요.</p>
+        <button onclick="requestCameraPermission()">카메라 권한 요청</button>
+    </div>
+
     <!-- Loading Modal -->
     <div id="loadingModal">
         <div id="loadingMessage">잠시만 기다려주세요...</div>
     </div>
 
     <script>
+        async function requestCameraPermission() {
+            try {
+                await navigator.mediaDevices.getUserMedia({ video: true });
+                startCamera();
+                document.getElementById("cameraPermissionMessage").style.display = 'none';
+            } catch (error) {
+                alert("카메라 권한 요청 실패. 브라우저 설정을 확인해주세요.");
+                console.error("카메라 접근 실패:", error);
+            }
+        }
+
         // 브라우저에서 카메라 스트림 시작
         async function startCamera() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 document.getElementById("video").srcObject = stream;
+                document.getElementById("cameraPermissionMessage").style.display = 'none'; // 권한이 허용되면 메시지 숨기기
             } catch (error) {
+                document.getElementById("cameraPermissionMessage").style.display = 'block'; // 권한 거부 시 메시지 표시
                 alert("카메라 접근이 차단되었습니다. 브라우저 설정을 확인하세요.");
                 console.error("카메라 접근 실패:", error);
             }
         }
-        startCamera();
+
+        // 카메라 권한 요청 및 스트리밍 시작
+        document.addEventListener("DOMContentLoaded", function() {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                startCamera();  // 페이지 로드 시 바로 카메라 시작
+            } else {
+                document.getElementById("cameraPermissionMessage").style.display = 'block';  // 카메라 권한 요청 메시지 표시
+            }
+        });
 
         // '향수 추천받기' 버튼 클릭 시, 현재 프레임을 캡처하여 서버에 전송
         document.getElementById('getFragranceBtn').addEventListener('click', function() {
@@ -200,8 +227,6 @@
                         let fragranceText = result.fragrance;
                         const fragranceItems = fragranceText.split('*').filter(item => item.trim() !== "");
                         const formattedResult = fragranceItems.map(item => `<p>${item.trim()}</p>`).join(' ');
-                        const fragranceFamily = getFragranceFamily(fragranceText);
-                        const fragranceImage = getFragranceImage(fragranceFamily);
 
                         resultDiv.innerHTML = `
                             <div class="fragrance-card">
@@ -209,9 +234,6 @@
                                 ${formattedResult}
                             </div>
                         `;
-                        const fragranceImgElement = document.getElementById('fragranceImage');
-                        fragranceImgElement.src = fragranceImage;
-                        fragranceImgElement.style.display = 'block';
                     } else {
                         resultDiv.innerHTML = `<span style='color: red;'>❌ Error: ${result.error}</span>`;
                     }
@@ -227,7 +249,7 @@
             location.reload();
         }
 
-        // 향수 계열 및 이미지 관련 함수는 그대로 유지
+        // 향수 계열을 판단하는 함수
         function getFragranceFamily(fragranceText) {
             if (fragranceText.includes('플로럴')) return 'floral';
             if (fragranceText.includes('우디')) return 'woody';
@@ -235,6 +257,7 @@
             return 'default';
         }
 
+        // 해당 계열에 맞는 이미지를 반환하는 함수
         function getFragranceImage(family) {
             const images = {
                 floral: 'https://www.valarflowers.com/cdn/shop/files/B28A0079.jpg?v=1696214606&width=1500',
@@ -244,6 +267,59 @@
             };
             return images[family] || images.default;
         }
+
+        // 향수 추천을 받아서 화면에 표시하는 코드 수정
+        document.getElementById('getFragranceBtn').addEventListener('click', function() {
+            const video = document.getElementById("video");
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(async (blob) => {
+                const formData = new FormData();
+                formData.append("image", blob, "photo.jpg");
+
+                document.getElementById('loadingModal').style.display = 'flex';
+
+                try {
+                    const response = await fetch("/upload_image", { method: "POST", body: formData });
+                    const result = await response.json();
+
+                    document.getElementById('loadingModal').style.display = 'none';
+                    document.getElementById('video-container').style.display = 'none';
+                    document.getElementById('getFragranceBtn').style.display = 'none';
+                    document.getElementById('retryBtn').style.display = 'inline-block';
+
+                    const resultDiv = document.getElementById('fragrance-result');
+                    const fragranceImage = document.getElementById('fragranceImage');
+
+                    if (result.fragrance) {
+                        let fragranceText = result.fragrance;
+                        const fragranceFamily = getFragranceFamily(fragranceText);
+                        const imageUrl = getFragranceImage(fragranceFamily);
+
+                        fragranceImage.src = imageUrl;
+                        fragranceImage.style.display = 'block'; // 이미지 표시
+
+                        const fragranceItems = fragranceText.split('*').filter(item => item.trim() !== "");
+                        const formattedResult = fragranceItems.map(item => `<p>${item.trim()}</p>`).join(' ');
+
+                        resultDiv.innerHTML = `
+                            <div class="fragrance-card">
+                                <h3>🌿 Recommended Fragrance:</h3>
+                                ${formattedResult}
+                            </div>
+                        `;
+                    } else {
+                        resultDiv.innerHTML = `<span style='color: red;'>❌ Error: ${result.error}</span>`;
+                    }
+                } catch (error) {
+                    document.getElementById('loadingModal').style.display = 'none';
+                    document.getElementById('fragrance-result').innerHTML = `<span style='color: red;'>❌ Request Failed: ${error}</span>`;
+                }
+            }, "image/jpeg");
+        });
+
     </script>
 
 </body>
