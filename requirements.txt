@@ -4,3 +4,4 @@ deepface
 google-generativeai
 numpy
 pillow
+tf-keras
