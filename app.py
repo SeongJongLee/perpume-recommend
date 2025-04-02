@@ -1,35 +1,14 @@
+from flask import Flask, request, jsonify, render_template
 import cv2
-from flask import Flask, render_template, Response, jsonify
+import numpy as np
 from deepface import DeepFace
 import google.generativeai as genai
 
-# Google Gemini API 키 설정
-genai.configure(api_key="AIzaSyDOWUcoNLFDDgIkG-I23aBZqHK7i0WrsnE")
-
-# Flask 애플리케이션 설정
 app = Flask(__name__)
 
+# Google Gemini API 설정
+genai.configure(api_key="AIzaSyDOWUcoNLFDDgIkG-I23aBZqHK7i0WrsnE")
 
-# 카메라 스트리밍을 위한 함수
-def gen_frames():
-    cap = cv2.VideoCapture(0)  # 웹캠을 열기
-
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        # 웹캠에서 프레임을 반환
-        _, buffer = cv2.imencode('.jpg', frame)
-        frame = buffer.tobytes()
-
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n\r\n')
-
-    cap.release()
-
-
-# 얼굴 분석 및 향수 추천 함수
 def analyze_face_and_recommend_fragrance(frame):
     try:
         # 얼굴 분석
@@ -61,8 +40,8 @@ def analyze_face_and_recommend_fragrance(frame):
 
     이 정보를 참고해서 먼저는 솔직하게 얼굴벡터를 분석해서 생각나는 눈매, 코, 볼, 턱 등의 특징을 세세하게 말해주되 알기 쉽게 10줄 이상 자세히 말해줘 대신 벡터에 대한 부분은 언급하지 말아줘.
     1. 어울리는 여러 향을 추천해주고 추천 이유와 느낌을 자세히 설명해줘.
-    2. 어울리는 향에 맞는 향수를 몇 가지 추천해줘. 
-    3. 나이와 성별에 대한 직접적인 언급은 하지 말아줘.
+    2. 어울리는 향에 맞는 향수를 한국어로 몇 가지 추천해줘. 
+    3. 나이와 성별은 언급하지 말고, 3번은 따로 말 안해줘도 돼
     """
 
     # 최신 Gemini 모델 사용
@@ -74,38 +53,21 @@ def analyze_face_and_recommend_fragrance(frame):
 
     return response.text.strip()
 
-
-# 메인 페이지 라우팅
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/upload_image', methods=['POST'])
+def upload_image():
+    if 'image' not in request.files:
+        return jsonify({"error": "이미지가 필요합니다."})
 
-# 실시간 영상 스트리밍 라우팅
-@app.route('/video')
-def video():
-    return Response(gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    file = request.files['image']
+    npimg = np.frombuffer(file.read(), np.uint8)
+    image = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
-
-# 향수 추천 요청 처리
-@app.route('/get_fragrance', methods=['POST'])
-def get_fragrance():
-    # 실시간으로 캡처한 프레임을 처리
-    cap = cv2.VideoCapture(0)
-    ret, frame = cap.read()
-    cap.release()
-
-    if not ret:
-        return jsonify({"error": "Failed to capture image"})
-
-    # 분석하고 추천 받기
-    fragrance = analyze_face_and_recommend_fragrance(frame)
-
-    if fragrance:
-        return jsonify({"fragrance": fragrance})
-    else:
-        return jsonify({"error": "Face analysis failed"})
-
+    fragrance = analyze_face_and_recommend_fragrance(image)
+    return jsonify({"fragrance": fragrance})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
